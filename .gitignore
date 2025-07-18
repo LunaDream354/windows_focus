@@ -3,3 +3,5 @@ dist/
 __pycache__/
 windows focus/
 *.spec
+data.enc
+key.key
