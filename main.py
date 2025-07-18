@@ -1,5 +1,7 @@
 
+import ctypes
 import os
+import sys
 import threading
 import time
 import win32gui
@@ -10,7 +12,11 @@ import json
 import installer
 from cryptography.fernet import Fernet
 from tkinter import messagebox
- 
+
+def attach_console():
+    # Allocates a new console if none exists
+    kernel32 = ctypes.windll.kernel32
+    kernel32.AllocConsole()
 def get_open_windows():
     def enum_handler(hwnd, result):
         if win32gui.IsWindowVisible(hwnd):
@@ -194,7 +200,6 @@ class WindowMonitorApp:
    
     def refresh_obs_obj_list(self):
         if not self.obs_connect():
-            messagebox.showerror(message="Error while trying to connect to obs")
             return
         obj_info = self.obs.send("GetInputList",raw=True)
         objs = []
@@ -284,13 +289,18 @@ class WindowMonitorApp:
             })
             self.last_window = focus_window
 
-   
+
 
 if __name__ == "__main__":
-    installer.install_dependencies("main.py")
+    print (sys.argv)
+    if len(sys.argv) > 1 and sys.argv[1] == "console":
+        attach_console()
+        print("Argument received:", sys.argv[1])
+    
+    
     root = tk.Tk()
 
     app = WindowMonitorApp(root)
-
+    
     root.mainloop()
 
