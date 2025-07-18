@@ -43,8 +43,11 @@ class WindowMonitorApp:
         self.WINDOWS_LIST = "window"
        
         self.obs_address_var = tk.StringVar()
+        self.obs_address_var.set("")
         self.obs_password_var = tk.StringVar()
+        self.obs_password_var.set("")
         self.obs_obj_var = tk.StringVar()
+        self.obs_obj_var.set("")
         self.obs_connection_button:tk.Button = None
         self.obs_sources_combobox:ttk.Combobox = None
  
