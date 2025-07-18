@@ -191,7 +191,10 @@ class WindowMonitorApp:
             messagebox.showerror(message="IP and port not valid format")
             return False
         try:
-            self.obs = obs.ReqClient(ip=ip,port=port,password=self.obs_password_var.get())
+            if self.obs_password_var.get() == "":
+                self.obs = obs.ReqClient(ip=ip,port=port)
+            else:
+                self.obs = obs.ReqClient(ip=ip,port=port,password=self.obs_password_var.get())
             self.obs_connection_button.config(text="Disconnect from obs",bg="red")
             return True
         except Exception as e:
