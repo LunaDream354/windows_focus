@@ -13,7 +13,6 @@ from cryptography.fernet import Fernet
 from tkinter import messagebox
 
 def attach_console():
-    # Allocates a new console if none exists
     kernel32 = ctypes.windll.kernel32
     kernel32.AllocConsole()
 def get_open_windows():
