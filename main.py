@@ -9,7 +9,6 @@ import tkinter as tk
 from tkinter import ttk
 import obsws_python as obs
 import json
-import installer
 from cryptography.fernet import Fernet
 from tkinter import messagebox
 
