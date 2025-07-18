@@ -35,7 +35,7 @@ class WindowMonitorApp:
         self.OBS_SOURCE_NAME = "obs_source_name"
         self.OBS_ADDRESS = "obs_address"
         self.OBS_PASSWORD = "obs_password"
-        self.SECUNDARY_WINDOW = "window_secondary"
+        self.WINDOWS_LIST = "window"
        
         self.obs_address_var = tk.StringVar()
         self.obs_password_var = tk.StringVar()
@@ -43,11 +43,9 @@ class WindowMonitorApp:
         self.obs_connection_button:tk.Button = None
         self.obs_sources_combobox:ttk.Combobox = None
  
-        self.window_primary_var = tk.StringVar()
-        self.window_secondary_var = tk.StringVar()
-        self.window_secondary_list:list[str]=[]
-        self.window_primary_combobox:ttk.Combobox = None
-        self.window_secondary_combobox:ttk.Combobox = None
+        self.windows_var = tk.StringVar()
+        self.windows_list:list[str]=[]
+        self.window_combobox:ttk.Combobox = None
        
         self.obs:obs.ReqClient = None
        
@@ -87,17 +85,12 @@ class WindowMonitorApp:
         self.obs_source_refresh_button.grid(row=row,column=1)
        
         row+=1
-        tk.Label(self.root,text="Primary window:").grid(row=row,column=0,sticky="e")
-        self.window_primary_combobox = ttk.Combobox(self.root,textvariable=self.window_primary_var,postcommand=self.refresh_window_primary)
-        self.window_primary_combobox.grid(row=row,column=1)
+        tk.Label(self.root,text="Window:").grid(row=row,column=0,sticky="e")
+        self.window_combobox = ttk.Combobox(self.root,textvariable=self.windows_var,postcommand=self.refresh_window_secondary)
+        self.window_combobox.grid(row=row,column=1)
        
         row+=1
-        tk.Label(self.root,text="Secondary window:").grid(row=row,column=0,sticky="e")
-        self.window_secondary_combobox = ttk.Combobox(self.root,textvariable=self.window_secondary_var,postcommand=self.refresh_window_secondary)
-        self.window_secondary_combobox.grid(row=row,column=1)
-       
-        row+=1
-        self.window_secondary_button = tk.Button(self.root,text="Add window",bg="gray",fg="white",command=self.add_window_secondary)
+        self.window_secondary_button = tk.Button(self.root,text="Add window",bg="gray",fg="white",command=self.add_window)
         self.window_secondary_button.grid(row=row,column=1)
        
         row+=1
@@ -113,8 +106,7 @@ class WindowMonitorApp:
             self.OBS_ADDRESS:self.obs_address_var.get(),
             self.OBS_PASSWORD:self.obs_password_var.get(),
             self.OBS_SOURCE_NAME:self.obs_obj_var.get(),
-            self.MAIN_WINDOW:self.window_primary_var.get(),
-            self.SECUNDARY_WINDOW:self.window_secondary_list
+            self.WINDOWS_LIST:self.windows_list
         }
         
         key = self.load_key()
@@ -140,12 +132,30 @@ class WindowMonitorApp:
             encrypted = f.read()
         decrypted = Fernet(key).decrypt(encrypted).decode()
         data =  json.loads(decrypted)
+        if( not data[self.OBS_ADDRESS] 
+            or not data[self.OBS_PASSWORD] 
+            or not data[self.OBS_SOURCE_NAME]
+            or not data[self.WINDOWS_LIST]):
+            
+            if not data[self.OBS_ADDRESS]:
+                data[self.OBS_ADDRESS] = ""
+                
+            if not data[self.OBS_PASSWORD] :
+                data[self.OBS_PASSWORD] = ""
+                
+            if not data[self.OBS_SOURCE_NAME]:
+                data[self.OBS_SOURCE_NAME] = ""
+                
+            if not data[self.WINDOWS_LIST]:
+                data[self.WINDOWS_LIST] = []
+                
+            
+                
         self.obs_address_var.set(data[self.OBS_ADDRESS])
         self.obs_password_var.set(data[self.OBS_PASSWORD])
         self.obs_obj_var.set(data[self.OBS_SOURCE_NAME])
-        self.window_primary_var.set(data[self.MAIN_WINDOW])
-        for item in data[self.SECUNDARY_WINDOW]:
-            self.add_window_secondary(item)
+        for item in data[self.WINDOWS_LIST]:
+            self.add_window(item)
        
    
     def get_ip_port(self):
@@ -196,33 +206,33 @@ class WindowMonitorApp:
         self._refresh_window_list(self.window_primary_combobox)
    
     def refresh_window_secondary(self):
-        self._refresh_window_list(self.window_secondary_combobox)
+        self._refresh_window_list(self.window_combobox)
    
     def _refresh_window_list(self,obj:ttk.Combobox):
         windows = get_open_windows()
         obj["values"] = windows
    
-    def add_window_secondary(self,window:str=""):
+    def add_window(self,window:str=""): 
         
         if window != "":
-            if window in self.window_secondary_list:
+            if window in self.windows_list:
                 return
-            self.window_secondary_list.append(window)
-            print(self.window_secondary_list)
+            self.windows_list.append(window)
+            print(self.windows_list)
         else:
-            if self.window_secondary_var.get() in self.window_secondary_list or self.window_secondary_var.get() == "":
+            if self.windows_var.get() in self.windows_list or self.windows_var.get() == "":
                 return
 
-            self.window_secondary_list.append(self.window_secondary_var.get())
+            self.windows_list.append(self.windows_var.get())
         frame = tk.Frame(self.window_secondary_frame)
-        frame.grid(row=len(self.window_secondary_list)-1,column=1)
-        tk.Label(frame,text=self.window_secondary_list[-1]).grid(row=0,column=0,sticky='w')
-        button = tk.Button(frame,text="Remove",bg="red",command=lambda:self.delete_window_secondary(frame,len(self.window_secondary_list)-1))
+        frame.grid(row=len(self.windows_list)-1,column=1)
+        tk.Label(frame,text=self.windows_list[-1]).grid(row=0,column=0,sticky='w')
+        button = tk.Button(frame,text="Remove",bg="red",command=lambda:self.delete_window(frame,len(self.windows_list)-1))
         button.grid(row=0,column=1,sticky='e')
            
-    def delete_window_secondary(self,item:tk.Frame,number):
+    def delete_window(self,item:tk.Frame,number):
         item.destroy()
-        del self.window_secondary_list[number]
+        del self.windows_list[number]
         self.refresh_window_secondary()
     
     
@@ -264,7 +274,7 @@ class WindowMonitorApp:
                     "searchOffset":0
                 },raw=True)["sceneItemId"]
             scene_info = self.obs.send("GetSceneList",raw=True)
-            if not focus_window in self.window_secondary_list and not focus_window == self.window_primary_var.get():
+            if not focus_window in self.windows_list:
                 enable = True
             self.obs.send("SetSceneItemEnabled",{
                 "sceneName":scene_info["currentProgramSceneName"],
