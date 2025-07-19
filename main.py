@@ -1,20 +1,17 @@
-
 import ctypes
 import os
 import sys
 import threading
 import time
+from obswebsocket import obsws, requests
+import obswebsocket
 import win32gui
 import tkinter as tk
 from tkinter import ttk
-import obsws_python as obs
 import json
 from cryptography.fernet import Fernet
 from tkinter import messagebox
-
-def attach_console():
-    kernel32 = ctypes.windll.kernel32
-    kernel32.AllocConsole()
+ 
 def get_open_windows():
     def enum_handler(hwnd, result):
         if win32gui.IsWindowVisible(hwnd):
@@ -54,7 +51,7 @@ class WindowMonitorApp:
         self.windows_list:list[str]=[]
         self.window_combobox:ttk.Combobox = None
        
-        self.obs:obs.ReqClient = None
+        self.obs:obsws = None
        
         self.monitoring = False
         self.monitoring_last = False
@@ -66,6 +63,8 @@ class WindowMonitorApp:
     def on_close(self):
         self.save()
         self.root.destroy()
+        if self.obs:
+            self.obs.disconnect()
        
     def create_widgets(self):
         row = 0
@@ -86,14 +85,14 @@ class WindowMonitorApp:
         tk.Label(self.root,text="Sources:").grid(row=row,column=0,sticky="e")
         self.obs_sources_combobox = ttk.Combobox(self.root,textvariable=self.obs_obj_var)
         self.obs_sources_combobox.grid(row=row,column=1)
-       
+      
         row+=1
         self.obs_source_refresh_button = tk.Button(self.root,text="Refresh sources",bg="gray",fg="white",command=self.refresh_obs_obj_list)
         self.obs_source_refresh_button.grid(row=row,column=1)
        
         row+=1
         tk.Label(self.root,text="Window:").grid(row=row,column=0,sticky="e")
-        self.window_combobox = ttk.Combobox(self.root,textvariable=self.windows_var,postcommand=self.refresh_window_secondary)
+        self.window_combobox = ttk.Combobox(self.root,textvariable=self.windows_var,postcommand=self.refresh_window)
         self.window_combobox.grid(row=row,column=1)
        
         row+=1
@@ -115,7 +114,7 @@ class WindowMonitorApp:
             self.OBS_SOURCE_NAME:self.obs_obj_var.get(),
             self.WINDOWS_LIST:self.windows_list
         }
-        
+       
         key = self.load_key()
         encrypted = Fernet(key).encrypt(json.dumps(json_data).encode())
         with open(self.DATA_FILE,"wb") as f:
@@ -139,25 +138,23 @@ class WindowMonitorApp:
             encrypted = f.read()
         decrypted = Fernet(key).decrypt(encrypted).decode()
         data =  json.loads(decrypted)
-        if( not data[self.OBS_ADDRESS] 
-            or not data[self.OBS_PASSWORD] 
+        if( not data[self.OBS_ADDRESS]
+            or not data[self.OBS_PASSWORD]
             or not data[self.OBS_SOURCE_NAME]
             or not data[self.WINDOWS_LIST]):
-            
+           
             if not data[self.OBS_ADDRESS]:
                 data[self.OBS_ADDRESS] = ""
-                
+               
             if not data[self.OBS_PASSWORD] :
                 data[self.OBS_PASSWORD] = ""
-                
+               
             if not data[self.OBS_SOURCE_NAME]:
                 data[self.OBS_SOURCE_NAME] = ""
-                
+               
             if not data[self.WINDOWS_LIST]:
                 data[self.WINDOWS_LIST] = []
-                
-            
-                
+
         self.obs_address_var.set(data[self.OBS_ADDRESS])
         self.obs_password_var.set(data[self.OBS_PASSWORD])
         self.obs_obj_var.set(data[self.OBS_SOURCE_NAME])
@@ -180,7 +177,7 @@ class WindowMonitorApp:
         self.obs = None
    
     def obs_connect(self):
-        if self.obs and self.obs.get_version().obs_version:
+        if self.obs:
             return True
         ip = ""
         port = ""
@@ -190,11 +187,9 @@ class WindowMonitorApp:
             messagebox.showerror(message="IP and port not valid format")
             return False
         try:
-            print(f"ip= {ip}")
-            print(f"port= {port}")
-            print(f'password= "{self.obs_password_var.get()}"')
-            
-            self.obs = obs.ReqClient(host=ip,port=port,password=self.obs_password_var.get())
+           
+            self.obs = obsws(ip,port,self.obs_password_var.get())
+            self.obs.connect()
             self.obs_connection_button.config(text="Disconnect from obs",bg="red")
             return True
         except Exception as e:
@@ -206,24 +201,24 @@ class WindowMonitorApp:
     def refresh_obs_obj_list(self):
         if not self.obs_connect():
             return
-        obj_info = self.obs.send("GetInputList",raw=True)
-        objs = []
-        for item in obj_info["inputs"]:
-            objs.append(item["inputName"])
+        scene_list = self.obs.call(requests.GetSceneList())
+        current_scene = scene_list.__dict__["datain"]["currentProgramSceneName"]
+        current_scene_uuid = scene_list.__dict__["datain"]["currentProgramSceneUuid"]
+        response = self.obs.call(requests.GetSceneItemList(sceneName=current_scene,sceneUuid=current_scene_uuid))
+        objs =[]
+        for source in response.__dict__['datain']['sceneItems']:
+            objs.append(source['sourceName'])
         self.obs_sources_combobox["values"] = objs
-        
-    def refresh_window_primary(self):
-        self._refresh_window_list(self.window_primary_combobox)
    
-    def refresh_window_secondary(self):
+    def refresh_window(self):
         self._refresh_window_list(self.window_combobox)
    
     def _refresh_window_list(self,obj:ttk.Combobox):
         windows = get_open_windows()
         obj["values"] = windows
    
-    def add_window(self,window:str=""): 
-        
+    def add_window(self,window:str=""):
+       
         if window != "":
             if window in self.windows_list:
                 return
@@ -232,7 +227,7 @@ class WindowMonitorApp:
         else:
             if self.windows_var.get() in self.windows_list or self.windows_var.get() == "":
                 return
-
+ 
             self.windows_list.append(self.windows_var.get())
         frame = tk.Frame(self.window_secondary_frame)
         frame.grid(row=len(self.windows_list)-1,column=1)
@@ -243,9 +238,9 @@ class WindowMonitorApp:
     def delete_window(self,item:tk.Frame,number):
         item.destroy()
         del self.windows_list[number]
-        self.refresh_window_secondary()
-    
-    
+        self.refresh_window()
+   
+   
     def toggle_monitoring(self):
         if self.monitoring:
             self.monitoring_button.config(bg="green",text="Start monitoring")
@@ -253,59 +248,53 @@ class WindowMonitorApp:
         else:
             if not self.obs_connect():
                 return
+            self.monitoring = True
             self.monitoring_button.config(bg="red",text="Stop monitoring")
             thread = threading.Thread(target=self.monitor)
             thread.start()
-            self.monitoring = True
-        
+       
     def get_var_safe(callback,a):
         # This runs in the main thread
         value = a.get()
         callback(value)
-        
+      
     def monitor(self):
-        scene_info = self.obs.send("GetSceneList",raw=True)
         while self.monitoring:
             time.sleep(0.01)
             focus_window = get_focused_window()
-            if focus_window == self.last_window:
+            if not focus_window or focus_window == self.last_window:
                 continue
-            obj_info = self.obs.send("GetInputList",raw=True)
-            obj_list = []
-            obj_uuid = ""
-            for item in obj_info["inputs"]:
-                obj_list.append(item["inputName"])
-            enable = False
-            if self.obs_obj_var.get() in obj_list:
-                obj_uuid = self.obs.send("GetSceneItemId",{
-                    "sceneName":scene_info["currentProgramSceneName"],
-                    "sceneUuid":scene_info["currentProgramSceneUuid"],
-                    "sourceName":self.obs_obj_var.get(),
-                    "searchOffset":0
-                },raw=True)["sceneItemId"]
-            scene_info = self.obs.send("GetSceneList",raw=True)
-            if not focus_window in self.windows_list:
-                enable = True
-            self.obs.send("SetSceneItemEnabled",{
-                "sceneName":scene_info["currentProgramSceneName"],
-                "sceneUuid":scene_info["currentProgramSceneUuid"],
-                "sceneItemId":obj_uuid,
-                "sceneItemEnabled":enable
-            })
+            scene_list = self.obs.call(requests.GetSceneList())
+            current_scene = scene_list.__dict__["datain"]["currentProgramSceneName"]
+            current_scene_uuid = scene_list.__dict__["datain"]["currentProgramSceneUuid"]
+            response = self.obs.call(requests.GetSceneItemId(
+                sceneName=current_scene,
+                sceneUuid=current_scene_uuid,
+                sourceName=self.obs_obj_var.get(),
+                searchOffset=0
+            ))
+            print (response.__dict__)
+            obj_uuid = response.__dict__['datain']['sceneItemId']
+            # response = self.obs.call(requests.GetSceneItemList(sceneName=current_scene,sceneUuid=current_scene_uuid))
+            # obj_uuid = ""
+            # for source in response.__dict__['datain']['sceneItems']:
+            #     if self.obs_obj_var.get() == source['sourceName']:
+            #         obj_uuid = source['sourceUuid']
+            if obj_uuid == "":
+                self.last_window = focus_window
+                continue
+            a = self.obs.call(requests.SetSceneItemEnabled(
+                sceneItemId=obj_uuid,
+                sceneItemEnabled= not focus_window in self.windows_list,
+                sceneName=current_scene,
+                sceneUuid=current_scene_uuid
+                ))
+            #print(a)
             self.last_window = focus_window
-
-
-
+ 
 if __name__ == "__main__":
-    print (sys.argv)
-    if len(sys.argv) > 1 and sys.argv[1] == "console":
-        attach_console()
-        print("Argument received:", sys.argv[1])
-    
-    
     root = tk.Tk()
-
     app = WindowMonitorApp(root)
-    
+   
     root.mainloop()
-
+ 
