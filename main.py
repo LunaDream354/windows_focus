@@ -1,16 +1,15 @@
-import ctypes
 import os
-import sys
 import threading
 import time
 from obswebsocket import obsws, requests
-import obswebsocket
 import win32gui
 import tkinter as tk
 from tkinter import ttk
 import json
 from cryptography.fernet import Fernet
 from tkinter import messagebox
+
+from installer import install_dependencies
  
 def get_open_windows():
     def enum_handler(hwnd, result):
@@ -293,6 +292,7 @@ class WindowMonitorApp:
             self.last_window = focus_window
  
 if __name__ == "__main__":
+    install_dependencies("main.py")
     root = tk.Tk()
     app = WindowMonitorApp(root)
    
