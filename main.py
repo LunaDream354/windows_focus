@@ -56,7 +56,7 @@ class WindowMonitorApp:
         self.monitoring_last = False
         self.last_window = ""
         self.create_widgets()
-        self.load_data()
+        self.load_data()    
         root.protocol("WM_DELETE_WINDOW", self.on_close)
  
     def on_close(self):
@@ -120,14 +120,16 @@ class WindowMonitorApp:
             f.write(encrypted)
                    
     def load_key(self):
+        
         if os.path.exists(self.KEY_FILE):
             with open(self.KEY_FILE,"rb") as f:
-                return f.read()            
+                return f.read()     
         else:
             key = Fernet.generate_key()
             with open(self.KEY_FILE, "wb") as f:
                 f.write(key)
             return key
+            
  
     def load_data(self):
         key = self.load_key()
@@ -135,7 +137,13 @@ class WindowMonitorApp:
             return
         with open(self.DATA_FILE,'rb') as f:
             encrypted = f.read()
-        decrypted = Fernet(key).decrypt(encrypted).decode()
+        decrypted:str = ""
+        try:
+            decrypted = Fernet(key).decrypt(encrypted).decode()
+        except Exception as e:
+            os.remove(self.KEY_FILE)
+            os.remove(self.DATA_FILE)
+            self.load_data
         data =  json.loads(decrypted)
         if( not data[self.OBS_ADDRESS]
             or not data[self.OBS_PASSWORD]
