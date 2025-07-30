@@ -30,11 +30,14 @@ class WindowMonitorApp:
         self.KEY_FILE = "key.key"
         self.root = root
         self.root.title("Window Focus Monitor")
+        self.OBS_SCENE = "obs_scene"
         self.OBS_SOURCE_NAME = "obs_source_name"
         self.OBS_ADDRESS = "obs_address"
         self.OBS_PASSWORD = "obs_password"
         self.WINDOWS_LIST = "window"
-       
+        self.obs_scene_name = ""
+        self.obs_scene_uuid = ""
+        self.obj_uuid = ""
         self.obs_address_var = tk.StringVar()
         self.obs_address_var.set("")
         self.obs_password_var = tk.StringVar()
@@ -109,7 +112,8 @@ class WindowMonitorApp:
             self.OBS_ADDRESS:self.obs_address_var.get(),
             self.OBS_PASSWORD:self.obs_password_var.get(),
             self.OBS_SOURCE_NAME:self.obs_obj_var.get(),
-            self.WINDOWS_LIST:self.windows_list
+            self.WINDOWS_LIST:self.windows_list,
+            self.OBS_SCENE:self.obs_scene_name
         }
        
         key = self.load_key()
@@ -143,26 +147,24 @@ class WindowMonitorApp:
             os.remove(self.DATA_FILE)
             self.load_data
         data =  json.loads(decrypted)
-        if( not data[self.OBS_ADDRESS]
-            or not data[self.OBS_PASSWORD]
-            or not data[self.OBS_SOURCE_NAME]
-            or not data[self.WINDOWS_LIST]):
            
-            if not data[self.OBS_ADDRESS]:
-                data[self.OBS_ADDRESS] = ""
-               
-            if not data[self.OBS_PASSWORD] :
-                data[self.OBS_PASSWORD] = ""
-               
-            if not data[self.OBS_SOURCE_NAME]:
-                data[self.OBS_SOURCE_NAME] = ""
-               
-            if not data[self.WINDOWS_LIST]:
-                data[self.WINDOWS_LIST] = []
-
+        if self.OBS_ADDRESS not in data:
+            data[self.OBS_ADDRESS] = ""
+            
+        if self.OBS_PASSWORD not in data :
+            data[self.OBS_PASSWORD] = ""
+            
+        if self.OBS_SCENE not in data or self.OBS_SOURCE_NAME not in data:
+            data[self.OBS_SCENE] = ""
+            data[self.OBS_SOURCE_NAME] = ""
+            
+        if self.WINDOWS_LIST not in data:
+            data[self.WINDOWS_LIST] = []
+        
         self.obs_address_var.set(data[self.OBS_ADDRESS])
         self.obs_password_var.set(data[self.OBS_PASSWORD])
         self.obs_obj_var.set(data[self.OBS_SOURCE_NAME])
+        self.obs_scene_name = data[self.OBS_SCENE]
         for item in data[self.WINDOWS_LIST]:
             self.add_window(item)
        
@@ -207,9 +209,10 @@ class WindowMonitorApp:
         if not self.obs_connect():
             return
         scene_list = self.obs.call(requests.GetSceneList())
-        current_scene = scene_list.__dict__["datain"]["currentProgramSceneName"]
-        current_scene_uuid = scene_list.__dict__["datain"]["currentProgramSceneUuid"]
-        response = self.obs.call(requests.GetSceneItemList(sceneName=current_scene,sceneUuid=current_scene_uuid))
+        self.obs_scene_name = scene_list.__dict__["datain"]["currentProgramSceneName"]
+        self.obs_scene_uuid = scene_list.__dict__["datain"]["currentProgramSceneUuid"]
+        response = self.obs.call(requests.GetSceneItemList(sceneName=self.obs_scene_name,
+                                                           sceneUuid=self.obs_scene_uuid))
         objs =[]
         for source in response.__dict__['datain']['sceneItems']:
             objs.append(source['sourceName'])
@@ -228,7 +231,6 @@ class WindowMonitorApp:
             if window in self.windows_list:
                 return
             self.windows_list.append(window)
-            print(self.windows_list)
         else:
             if self.windows_var.get() in self.windows_list or self.windows_var.get() == "":
                 return
@@ -253,6 +255,22 @@ class WindowMonitorApp:
         else:
             if not self.obs_connect():
                 return
+            if not self.obs_obj_var.get():
+                return
+            scene_list = self.obs.call(requests.GetSceneList())
+            self.obs_scene_uuid = ""
+            for scene in scene_list.datain["scenes"]:
+                if scene["sceneName"] == self.obs_scene_name:
+                    self.obs_scene_uuid = scene["sceneUuid"]
+            if not self.obs_scene_uuid:
+                return
+            response = self.obs.call(requests.GetSceneItemId(
+                sceneName=self.obs_scene_name,
+                sceneUuid=self.obs_scene_uuid,
+                sourceName=self.obs_obj_var.get(),
+                searchOffset=0
+            ))
+            self.obj_uuid = response.datain['sceneItemId']
             self.monitoring = True
             self.monitoring_button.config(bg="red",text="Stop monitoring")
             thread = threading.Thread(target=self.monitor)
@@ -269,32 +287,12 @@ class WindowMonitorApp:
             focus_window = get_focused_window()
             if not focus_window or focus_window == self.last_window:
                 continue
-            scene_list = self.obs.call(requests.GetSceneList())
-            current_scene = scene_list.__dict__["datain"]["currentProgramSceneName"]
-            current_scene_uuid = scene_list.__dict__["datain"]["currentProgramSceneUuid"]
-            response = self.obs.call(requests.GetSceneItemId(
-                sceneName=current_scene,
-                sceneUuid=current_scene_uuid,
-                sourceName=self.obs_obj_var.get(),
-                searchOffset=0
-            ))
-            print (response.__dict__)
-            obj_uuid = response.__dict__['datain']['sceneItemId']
-            # response = self.obs.call(requests.GetSceneItemList(sceneName=current_scene,sceneUuid=current_scene_uuid))
-            # obj_uuid = ""
-            # for source in response.__dict__['datain']['sceneItems']:
-            #     if self.obs_obj_var.get() == source['sourceName']:
-            #         obj_uuid = source['sourceUuid']
-            if obj_uuid == "":
-                self.last_window = focus_window
-                continue
-            a = self.obs.call(requests.SetSceneItemEnabled(
-                sceneItemId=obj_uuid,
+            self.obs.call(requests.SetSceneItemEnabled(
+                sceneItemId=self.obj_uuid,
                 sceneItemEnabled= not focus_window in self.windows_list,
-                sceneName=current_scene,
-                sceneUuid=current_scene_uuid
+                sceneName=self.obs_scene_name,
+                sceneUuid=self.obs_scene_uuid
                 ))
-            #print(a)
             self.last_window = focus_window
  
 if __name__ == "__main__":
