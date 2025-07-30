@@ -283,7 +283,7 @@ class WindowMonitorApp:
       
     def monitor(self):
         while self.monitoring:
-            time.sleep(0.01)
+            time.sleep(0.001)
             focus_window = get_focused_window()
             if not focus_window or focus_window == self.last_window:
                 continue
